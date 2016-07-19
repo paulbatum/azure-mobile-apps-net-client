@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using System.Threading;
 
 namespace Microsoft.WindowsAzure.MobileServices
 {
@@ -48,6 +49,11 @@ namespace Microsoft.WindowsAzure.MobileServices
         /// <see cref="System.Linq.Expressions.Expression"/> instance.
         /// </summary>
         private readonly Dictionary<MemberInfo, JsonProperty> jsonPropertyCache = new Dictionary<MemberInfo, JsonProperty>();
+
+        /// <summary>
+        /// A lock used to synchronize concurrent access to the jsonPropertyCache.
+        /// </summary>
+        private readonly ReaderWriterLockSlim jsonPropertyCacheLock = new ReaderWriterLockSlim();
 
         /// <summary>
         /// A cache of the system properties supported for a given type.
@@ -190,10 +196,20 @@ namespace Microsoft.WindowsAzure.MobileServices
         public virtual JsonProperty ResolveProperty(MemberInfo member)
         {
             JsonProperty property = null;
-            if (!this.jsonPropertyCache.TryGetValue(member, out property))
+
+            try
             {
-                ResolveContract(member.DeclaringType);
-                this.jsonPropertyCache.TryGetValue(member, out property);
+                jsonPropertyCacheLock.EnterReadLock();
+                
+                if (!this.jsonPropertyCache.TryGetValue(member, out property))
+                {
+                    ResolveContract(member.DeclaringType);
+                    this.jsonPropertyCache.TryGetValue(member, out property);
+                }                
+            }
+            finally
+            {
+                jsonPropertyCacheLock.ExitReadLock();
             }
 
             return property;
@@ -322,10 +338,15 @@ namespace Microsoft.WindowsAzure.MobileServices
         {
             JsonProperty property = base.CreateProperty(member, memberSerialization);
 
-            lock (jsonPropertyCache)
+            try
             {
+                jsonPropertyCacheLock.EnterWriteLock();
                 this.jsonPropertyCache[member] = property;
-            }
+            }            
+            finally
+            {
+                jsonPropertyCacheLock.ExitWriteLock();
+            }            
 
             return property;
         }
@@ -369,7 +390,19 @@ namespace Microsoft.WindowsAzure.MobileServices
 
                 // Create a reverse cache of property to memberInfo to be used locally for validating the type
                 Dictionary<JsonProperty, MemberInfo> memberInfoCache = new Dictionary<JsonProperty, MemberInfo>();
-                foreach (KeyValuePair<MemberInfo, JsonProperty> pair in jsonPropertyCache.ToList())
+                IEnumerable<KeyValuePair<MemberInfo, JsonProperty>> tempJsonPropertyCache;
+
+                try
+                {
+                    jsonPropertyCacheLock.EnterReadLock();
+                    tempJsonPropertyCache = jsonPropertyCache.ToList();
+                }
+                finally
+                {
+                    jsonPropertyCacheLock.ExitReadLock();
+                }
+
+                foreach (KeyValuePair<MemberInfo, JsonProperty> pair in tempJsonPropertyCache)
                 {
                     if (pair.Key.DeclaringType.GetTypeInfo().IsAssignableFrom(typeInfo))
                     {

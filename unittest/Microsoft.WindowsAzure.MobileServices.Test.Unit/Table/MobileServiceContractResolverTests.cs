@@ -11,7 +11,6 @@ namespace Microsoft.WindowsAzure.MobileServices.Test.Unit.Table
     [TestClass]
     public class MobileServiceContractResolverTests
     {
-
         [TestMethod]
         public void IsThreadSafe()
         {
