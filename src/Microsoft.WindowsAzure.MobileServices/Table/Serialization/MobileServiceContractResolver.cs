@@ -321,7 +321,11 @@ namespace Microsoft.WindowsAzure.MobileServices
         protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
         {
             JsonProperty property = base.CreateProperty(member, memberSerialization);
-            this.jsonPropertyCache[member] = property;
+
+            lock (jsonPropertyCache)
+            {
+                this.jsonPropertyCache[member] = property;
+            }
 
             return property;
         }
@@ -365,7 +369,7 @@ namespace Microsoft.WindowsAzure.MobileServices
 
                 // Create a reverse cache of property to memberInfo to be used locally for validating the type
                 Dictionary<JsonProperty, MemberInfo> memberInfoCache = new Dictionary<JsonProperty, MemberInfo>();
-                foreach (KeyValuePair<MemberInfo, JsonProperty> pair in jsonPropertyCache)
+                foreach (KeyValuePair<MemberInfo, JsonProperty> pair in jsonPropertyCache.ToList())
                 {
                     if (pair.Key.DeclaringType.GetTypeInfo().IsAssignableFrom(typeInfo))
                     {
