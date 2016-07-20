@@ -389,7 +389,7 @@ namespace Microsoft.WindowsAzure.MobileServices
                 JsonProperty idProperty = DetermineIdProperty(type, properties);
 
                 // Create a reverse cache of property to memberInfo to be used locally for validating the type
-                Dictionary<JsonProperty, MemberInfo> memberInfoCache = new Dictionary<JsonProperty, MemberInfo>();
+                Dictionary<JsonProperty, MemberInfo> memberInfoCache = new Dictionary<JsonProperty, MemberInfo>(new JsonPropertyComparer());
                 IEnumerable<KeyValuePair<MemberInfo, JsonProperty>> tempJsonPropertyCache;
 
                 try
@@ -574,6 +574,32 @@ namespace Microsoft.WindowsAzure.MobileServices
                 else
                 {
                     property.MemberConverter = new NullHandlingConverter(property.MemberConverter);
+                }
+            }
+        }
+
+        private class JsonPropertyComparer : EqualityComparer<JsonProperty>
+        {
+            public override bool Equals(JsonProperty x, JsonProperty y)
+            {
+                bool equal = 
+                    x.DeclaringType == y.DeclaringType
+                    && x.PropertyName == y.PropertyName
+                    && x.PropertyType == y.PropertyType;
+
+                return equal;
+            }
+
+            public override int GetHashCode(JsonProperty obj)
+            {
+                unchecked // Overflow is fine, just wrap
+                {
+                    int hash = 17;
+                    // Suitable nullity checks etc, of course :)
+                    hash = hash * 23 + obj.DeclaringType.GetHashCode();
+                    hash = hash * 23 + obj.PropertyName.GetHashCode();
+                    hash = hash * 23 + obj.PropertyType.GetHashCode();
+                    return hash;
                 }
             }
         }
